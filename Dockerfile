@@ -109,8 +109,6 @@ RUN npm install -g \
     eslint \
     prettier
 
-# Claude Code (native installer)
-RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # =============================================================================
 # Layer 4: User setup
@@ -153,6 +151,11 @@ WORKDIR /workspace
 # Persist command history
 RUN mkdir -p /home/dev/.local/share && \
     touch /home/dev/.zsh_history
+
+# Claude Code (native installer)
+RUN curl -fsSL https://claude.ai/install.sh | bash && \
+    sudo cp /home/dev/.local/bin/claude /usr/local/bin/claude && \
+    sudo chmod +x /usr/local/bin/claude
 
 # Shell prompt (Starship)
 RUN echo 'eval "$(starship init zsh)"' >> /home/dev/.zshrc

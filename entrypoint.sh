@@ -67,22 +67,23 @@ generate_slug() {
 [ -f /home/dev/.claude/CLAUDE.md ] || cp /home/dev/.claude-defaults/CLAUDE.md /home/dev/.claude/CLAUDE.md
 
 # ---- Claude Code Auth ----
-# Check if Claude is already authed; if not, run interactive login
-if ! claude auth status &>/dev/null; then
+# If no API key is set, we need an interactive login for Max subscription
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
     echo ""
     echo "========================================"
-    echo "  Claude Code login required"
-    echo "  A browser URL will be shown below."
-    echo "  Copy it to your host browser to auth."
+    echo "  Claude Code login required (Max sub)"
+    echo "  A URL will be shown -- open it in"
+    echo "  your browser to complete OAuth."
     echo "========================================"
     echo ""
-    claude login
+    claude login || true
 fi
 
 # =============================================================================
 # Mode: local (copy in project files, run Claude interactively)
 # =============================================================================
 if [ "$TASK_MODE" = "local" ]; then
+    echo "Extracting project files..."
     mkdir -p /workspace/repo
     cd /workspace/repo
     tar xzf /tmp/src.tar.gz
@@ -91,14 +92,40 @@ if [ "$TASK_MODE" = "local" ]; then
     if [ ! -d .git ]; then
         git init
         git add -A
-        git commit -m "initial import" --allow-empty
+        git commit -m "initial import"
     fi
 
+    # Create a working branch, carrying over any uncommitted changes
     if [ -n "$TASK_PROMPT" ]; then
-        exec claude -p "$TASK_PROMPT" --dangerously-skip-permissions
+        SLUG=$(generate_slug "$TASK_PROMPT")
+        BRANCH="${BRANCH_PREFIX}/${SLUG}"
     else
-        exec claude --dangerously-skip-permissions
+        BRANCH="${BRANCH_PREFIX}/work-$(date +%s)"
     fi
+
+    # Stash any dirty state, branch, then restore it
+    git add -A
+    git stash --quiet 2>/dev/null || true
+    echo "Creating branch: $BRANCH"
+    git checkout -b "$BRANCH"
+    git stash pop --quiet 2>/dev/null || true
+
+    echo ""
+    echo "=== Launching Claude Code in tmux ==="
+    echo "Branch: $(git branch --show-current)"
+    [ -n "$TASK_PROMPT" ] && echo "Prompt: $TASK_PROMPT"
+    echo ""
+
+    if [ -n "$TASK_PROMPT" ]; then
+        tmux new-session -d -s worker -c /workspace/repo \
+            "claude -p \"$TASK_PROMPT\" --dangerously-skip-permissions; exec zsh"
+    else
+        tmux new-session -d -s worker -c /workspace/repo \
+            "claude --dangerously-skip-permissions; exec zsh"
+    fi
+
+    echo "Attaching to tmux session..."
+    exec tmux attach -t worker
 fi
 
 # =============================================================================

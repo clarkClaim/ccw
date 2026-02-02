@@ -219,21 +219,23 @@ cmd_here() {
     echo -e "${BLUE}Starting local worker: $name${NC}"
     echo "  Project: $(pwd)"
 
-    # Create a temp tarball of the current directory (respects .gitignore via git archive)
-    local tarball=$(mktemp /tmp/ccw-src-XXXXXX.tar.gz)
-    if git rev-parse --is-inside-work-tree &>/dev/null; then
-        # Include tracked + untracked (but not ignored) files
-        git ls-files -co --exclude-standard -z | xargs -0 tar czf "$tarball"
-    else
-        tar czf "$tarball" --exclude=node_modules --exclude=.git --exclude=__pycache__ .
-    fi
+    # Create a temp tarball of the current directory
+    local tarball="/tmp/ccw-src-$$.tar.gz"
+    tar czf "$tarball" --exclude=node_modules --exclude=__pycache__ --exclude=.venv .
 
     docker run -it \
         --name "$name" \
         --cap-add NET_ADMIN \
         --cap-add NET_RAW \
         -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
+        -e OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
+        -e HF_TOKEN="${HF_TOKEN:-}" \
         -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" \
+        -e MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}" \
+        -e MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}" \
+        -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}" \
+        -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}" \
+        -e AWS_REGION="${AWS_REGION:-us-east-1}" \
         -e TASK_MODE=local \
         -e TASK_PROMPT="$prompt" \
         -v ccw-claude-auth:/home/dev/.claude \
