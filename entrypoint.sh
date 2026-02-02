@@ -22,17 +22,21 @@ echo "=== CCW Worker Starting ==="
 echo "Mode: $TASK_MODE"
 
 # ---- SSH Server ----
-if [ -d /home/dev/.ssh ] && ls /home/dev/.ssh/*.pub &>/dev/null; then
+# Host .ssh is mounted read-only at .ssh-mount; copy public keys to writable .ssh
+if [ -d /home/dev/.ssh-mount ] && ls /home/dev/.ssh-mount/*.pub &>/dev/null; then
     mkdir -p /home/dev/.ssh
-    if [ ! -f /home/dev/.ssh/authorized_keys ]; then
-        cat /home/dev/.ssh/*.pub > /home/dev/.ssh/authorized_keys 2>/dev/null || true
-    fi
+    cat /home/dev/.ssh-mount/*.pub > /home/dev/.ssh/authorized_keys 2>/dev/null || true
     chmod 700 /home/dev/.ssh
     chmod 600 /home/dev/.ssh/authorized_keys 2>/dev/null || true
     sudo /usr/sbin/sshd
     echo "SSH server started on port 22"
 else
     echo "No SSH public keys found, skipping SSH server"
+fi
+
+# ---- Docker Socket ----
+if [ -S /var/run/docker.sock ]; then
+    sudo chmod 666 /var/run/docker.sock
 fi
 
 # ---- Firewall ----
@@ -56,6 +60,46 @@ fi
 generate_slug() {
     echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | cut -c1-40 | sed 's/-$//'
 }
+
+# ---- Worker Config ----
+# Volume mount may override baked-in config; ensure worker defaults exist
+[ -f /home/dev/.claude/settings.json ] || cp /home/dev/.claude-defaults/settings.json /home/dev/.claude/settings.json
+[ -f /home/dev/.claude/CLAUDE.md ] || cp /home/dev/.claude-defaults/CLAUDE.md /home/dev/.claude/CLAUDE.md
+
+# ---- Claude Code Auth ----
+# Check if Claude is already authed; if not, run interactive login
+if ! claude auth status &>/dev/null; then
+    echo ""
+    echo "========================================"
+    echo "  Claude Code login required"
+    echo "  A browser URL will be shown below."
+    echo "  Copy it to your host browser to auth."
+    echo "========================================"
+    echo ""
+    claude login
+fi
+
+# =============================================================================
+# Mode: local (copy in project files, run Claude interactively)
+# =============================================================================
+if [ "$TASK_MODE" = "local" ]; then
+    mkdir -p /workspace/repo
+    cd /workspace/repo
+    tar xzf /tmp/src.tar.gz
+
+    # Init git if not already a repo
+    if [ ! -d .git ]; then
+        git init
+        git add -A
+        git commit -m "initial import" --allow-empty
+    fi
+
+    if [ -n "$TASK_PROMPT" ]; then
+        exec claude -p "$TASK_PROMPT" --dangerously-skip-permissions
+    else
+        exec claude --dangerously-skip-permissions
+    fi
+fi
 
 # =============================================================================
 # Mode: attach (just start tmux and wait)

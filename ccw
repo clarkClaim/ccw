@@ -32,6 +32,7 @@ Usage:
   ccw logs <name>                        Tail Claude's output
   ccw kill <name>                        Stop and remove a worker
   ccw kill-all                           Stop and remove all workers
+  ccw here ["<prompt>"]                   Copy current dir into a container, run Claude
   ccw shell                              Start a worker in attach mode (no task)
 
 Options:
@@ -127,7 +128,8 @@ cmd_run() {
         -e TASK_PROMPT="$prompt" \
         -e MAX_TURNS="$max_turns" \
         -e ENABLE_FIREWALL="$firewall" \
-        -v "${HOME}/.ssh:/home/dev/.ssh:ro" \
+        -v ccw-claude-auth:/home/dev/.claude \
+        -v "${HOME}/.ssh:/home/dev/.ssh-mount:ro" \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -p "$ssh_port:22" \
         "$CCW_IMAGE"
@@ -189,7 +191,8 @@ cmd_new() {
         -e TASK_PROMPT="$prompt" \
         -e MAX_TURNS="$max_turns" \
         -e ENABLE_FIREWALL="$firewall" \
-        -v "${HOME}/.ssh:/home/dev/.ssh:ro" \
+        -v ccw-claude-auth:/home/dev/.claude \
+        -v "${HOME}/.ssh:/home/dev/.ssh-mount:ro" \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -p "$ssh_port:22" \
         "$CCW_IMAGE"
@@ -203,6 +206,44 @@ cmd_new() {
         sleep 2
         docker logs -f "$name"
     fi
+}
+
+cmd_here() {
+    local prompt="${1:-}"
+    load_env
+
+    local dir_name=$(basename "$(pwd)")
+    local name="${CCW_PREFIX}-${dir_name}-$$"
+    local ssh_port="$(free_port)"
+
+    echo -e "${BLUE}Starting local worker: $name${NC}"
+    echo "  Project: $(pwd)"
+
+    # Create a temp tarball of the current directory (respects .gitignore via git archive)
+    local tarball=$(mktemp /tmp/ccw-src-XXXXXX.tar.gz)
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        # Include tracked + untracked (but not ignored) files
+        git ls-files -co --exclude-standard -z | xargs -0 tar czf "$tarball"
+    else
+        tar czf "$tarball" --exclude=node_modules --exclude=.git --exclude=__pycache__ .
+    fi
+
+    docker run -it \
+        --name "$name" \
+        --cap-add NET_ADMIN \
+        --cap-add NET_RAW \
+        -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
+        -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" \
+        -e TASK_MODE=local \
+        -e TASK_PROMPT="$prompt" \
+        -v ccw-claude-auth:/home/dev/.claude \
+        -v "${HOME}/.ssh:/home/dev/.ssh-mount:ro" \
+        -v "$tarball:/tmp/src.tar.gz:ro" \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -p "$ssh_port:22" \
+        "$CCW_IMAGE"
+
+    rm -f "$tarball"
 }
 
 cmd_shell() {
@@ -220,7 +261,8 @@ cmd_shell() {
         -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
         -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" \
         -e TASK_MODE=attach \
-        -v "${HOME}/.ssh:/home/dev/.ssh:ro" \
+        -v ccw-claude-auth:/home/dev/.claude \
+        -v "${HOME}/.ssh:/home/dev/.ssh-mount:ro" \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -p "$ssh_port:22" \
         "$CCW_IMAGE"
@@ -278,6 +320,7 @@ case "${1:-help}" in
     build)      cmd_build ;;
     run)        cmd_run "$2" "$3" "${@:4}" ;;
     new)        cmd_new "$2" "$3" "${@:4}" ;;
+    here)       cmd_here "${2:-}" ;;
     shell)      cmd_shell ;;
     attach)     cmd_attach "$2" ;;
     ssh)        cmd_ssh "$2" ;;

@@ -15,8 +15,8 @@ You are running inside an isolated Docker container as an autonomous coding agen
 
 Break your work into logical phases. After each phase:
 
-1. Run any available tests (`just test`, `npm test`, `pytest`, etc.)
-2. Run any available linters (`just check`, `npm run lint`, `ruff check .`, etc.)
+1. Run any available tests (`just test`, `yarn test`, `pytest`, etc.)
+2. Run any available linters (`just check`, `yarn lint`, `ruff check .`, etc.)
 3. Fix any issues before committing
 4. Commit with a conventional commit message: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`
 5. Push the branch
@@ -45,7 +45,7 @@ Break your work into logical phases. After each phase:
 - Use `pytest` for testing
 
 ### Node/TypeScript Projects
-- Use `npm` for package management
+- Use `yarn` for package management
 - Use `prettier` for formatting, `eslint` for linting
 - Use TypeScript strict mode
 - Use `jest` for testing
@@ -55,7 +55,7 @@ Break your work into logical phases. After each phase:
 
 - **git**, **gh** (GitHub CLI) -- version control and PRs
 - **uv**, **ruff**, **basedpyright**, **just**, **pre-commit** -- Python toolchain
-- **node**, **npm**, **npx**, **typescript**, **prisma**, **eslint**, **prettier** -- Node toolchain
+- **node**, **yarn**, **npx**, **typescript**, **prisma**, **eslint**, **prettier** -- Node toolchain
 - **tmux**, **nvim**, **ripgrep**, **jq**, **curl** -- dev tools
 - **docker** CLI -- talk to sibling database containers
 
